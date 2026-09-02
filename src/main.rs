@@ -101,8 +101,8 @@ fn main() {
     }
 
     // get files/folders in current directory
-    let path = &Path::new(&check_dir);
-    git::check_file(path);
+    // let path = &Path::new(&check_dir);
+    // git::check_file(path);
 
     free_stacks();
     return;
