@@ -9,16 +9,17 @@ static ERROR_BUF: Mutex<String> = Mutex::new(String::new());
 
 static CHECK_STACK: LazyLock<Mutex<Vec<String>>> = LazyLock::new(|| Mutex::new(Vec::new()));
 static IGNORE_STACK: LazyLock<Mutex<Vec<String>>> = LazyLock::new(|| Mutex::new(Vec::new()));
-// static FILE_STACK: LazyLock<Mutex<Vec<String>>> = LazyLock::new(|| Mutex::new(Vec::new()));
+static READ_STACK: LazyLock<Mutex<Vec<String>>> = LazyLock::new(|| Mutex::new(Vec::new()));
 
 static SHOW_HIDDEN: LazyLock<Mutex<bool>> = LazyLock::new(|| Mutex::new(false));
+static SEARCH_DEEP: LazyLock<Mutex<bool>> = LazyLock::new(|| Mutex::new(false));
 
 static GITIGNORE: LazyLock<Mutex<PathBuf>> =
     LazyLock::new(|| Mutex::new(std::path::PathBuf::from(".gitignore")));
 
 enum Stacks {
     CheckStack,
-    // ReadStack,
+    ReadStack,
     IgnoreStack,
 }
 
@@ -27,10 +28,11 @@ fn add_to_stack(file: String, _stack: Stacks) {
         Stacks::CheckStack => {
             let mut stack = CHECK_STACK.lock().unwrap();
             stack.push(file);
-        } // Stacks::ReadStack => {
-        // let mut stack = FILE_STACK.lock().unwrap();
-        // stack.push(file);
-        // }
+        }
+        Stacks::ReadStack => {
+            let mut stack = READ_STACK.lock().unwrap();
+            stack.push(file);
+        }
         Stacks::IgnoreStack => {
             let mut stack = IGNORE_STACK.lock().unwrap();
             stack.push(file);
@@ -39,19 +41,28 @@ fn add_to_stack(file: String, _stack: Stacks) {
 }
 
 fn release_stacks(stacks: Stacks) {
+    print!("\nReleasing stack->");
+
     match stacks {
         Stacks::CheckStack => {
+            println!("Check Stack");
+
             let mut stack = CHECK_STACK.lock().unwrap();
             while let Some(val) = stack.pop() {
                 println!("Popped: {val}");
             }
-        } // Stacks::ReadStack => {
-        // let mut stack = FILE_STACK.lock().unwrap();
-        // while let Some(val) = stack.pop() {
-        // println!("Popped: {val}");
-        // }
-        // }
+        }
+        Stacks::ReadStack => {
+            println!("Read Stack");
+
+            let mut stack = READ_STACK.lock().unwrap();
+            while let Some(val) = stack.pop() {
+                println!("Popped: {val}");
+            }
+        }
         Stacks::IgnoreStack => {
+            println!("Ignore Stack");
+
             let mut stack = IGNORE_STACK.lock().unwrap();
             while let Some(val) = stack.pop() {
                 println!("Popped: {val}");
@@ -60,6 +71,7 @@ fn release_stacks(stacks: Stacks) {
     }
 }
 
+// toggles and bool checks
 pub fn toggle_show_hidden() {
     if let Ok(mut lock) = SHOW_HIDDEN.lock() {
         *lock = !*lock;
@@ -70,9 +82,22 @@ pub fn is_show_hidden() -> bool {
     SHOW_HIDDEN.lock().map(|lock| *lock).unwrap_or(false)
 }
 
+pub fn toggle_search_deep() {
+    if let Ok(mut lock) = SEARCH_DEEP.lock() {
+        *lock = !*lock;
+    }
+}
+
+pub fn is_search_deep() -> bool {
+    SEARCH_DEEP.lock().map(|lock| *lock).unwrap_or(false)
+}
+
+// main
 fn main() {
     #[warn(unused_variables)]
     let current_err = ERROR_BUF.lock().unwrap();
+
+    let mut depth: i32 = 0;
 
     // Get arguments
     let mut args = std::env::args().skip(1);
@@ -88,6 +113,17 @@ fn main() {
             }
         } else if "--show_hidden" == arg {
             toggle_show_hidden();
+        } else if "--full" == arg {
+            toggle_search_deep();
+            // println!("{}", arg);
+        } else if "--depth" == arg {
+            toggle_search_deep();
+            if let Some(deep) = args.next() {
+                if let Ok(parsed) = deep.parse::<i32>() {
+                    depth = parsed;
+                }
+            }
+            println!("{}", arg);
         } else {
             let file: String = arg.clone();
             add_to_stack(file, Stacks::CheckStack);
@@ -109,7 +145,7 @@ fn main() {
 
     // get files/folders in current directory
     let path = &Path::new(&check_dir);
-    git::check_file(path);
+    git::check_directory(path, depth);
 
     free_stacks();
     return;
@@ -117,7 +153,7 @@ fn main() {
 
 fn free_stacks() {
     release_stacks(Stacks::CheckStack);
-    // release_stacks(Stacks::ReadStack);
+    release_stacks(Stacks::ReadStack);
     release_stacks(Stacks::IgnoreStack);
 }
 

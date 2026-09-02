@@ -31,7 +31,7 @@ pub fn read_gitignore() {
     }
 }
 
-pub fn check_file(path: &Path) {
+pub fn check_directory(path: &Path, _depth: i32) {
     for file in read_dir(path).unwrap() {
         let entry = file.unwrap();
         let filename = entry.file_name().to_string_lossy().to_string();
@@ -40,9 +40,7 @@ pub fn check_file(path: &Path) {
             read_gitignore();
             continue;
         } else if filename.starts_with('.') {
-            if is_show_hidden() {
-                // if showing hidden files, fall through to add to stack
-            } else {
+            if !is_show_hidden() {
                 continue;
             }
         }
@@ -57,10 +55,11 @@ pub fn check_file(path: &Path) {
         for check_file in check_stack.iter() {
             // println!("ignore: {} -> check: {}", ignore_file, check_file);
             if ignore_file == check_file {
-                println!("check: {} ->  ignore", ignore_file);
+                // println!("check: {} ->  ignore", ignore_file);
                 continue;
             } else {
-                println!("check: {} ->  no ignore", check_file);
+                // println!("check: {} ->  no ignore", check_file);
+                add_to_stack(check_file.clone(), Stacks::ReadStack);
                 continue;
             }
         }
