@@ -2,6 +2,7 @@ use std::path::*;
 use std::sync::{LazyLock, Mutex};
 
 mod git;
+mod search;
 mod tui;
 
 #[warn(unused)]
@@ -10,6 +11,7 @@ static ERROR_BUF: Mutex<String> = Mutex::new(String::new());
 static CHECK_STACK: LazyLock<Mutex<Vec<String>>> = LazyLock::new(|| Mutex::new(Vec::new()));
 static IGNORE_STACK: LazyLock<Mutex<Vec<String>>> = LazyLock::new(|| Mutex::new(Vec::new()));
 static READ_STACK: LazyLock<Mutex<Vec<String>>> = LazyLock::new(|| Mutex::new(Vec::new()));
+static FILE_STACK: LazyLock<Mutex<Vec<String>>> = LazyLock::new(|| Mutex::new(Vec::new()));
 
 static SHOW_HIDDEN: LazyLock<Mutex<bool>> = LazyLock::new(|| Mutex::new(false));
 static SEARCH_DEEP: LazyLock<Mutex<bool>> = LazyLock::new(|| Mutex::new(false));
@@ -21,6 +23,7 @@ enum Stacks {
     CheckStack,
     ReadStack,
     IgnoreStack,
+    FileStack,
 }
 
 fn add_to_stack(file: String, _stack: Stacks) {
@@ -35,6 +38,10 @@ fn add_to_stack(file: String, _stack: Stacks) {
         }
         Stacks::IgnoreStack => {
             let mut stack = IGNORE_STACK.lock().unwrap();
+            stack.push(file);
+        }
+        Stacks::FileStack => {
+            let mut stack = FILE_STACK.lock().unwrap();
             stack.push(file);
         }
     }
@@ -64,6 +71,14 @@ fn release_stacks(stacks: Stacks) {
             println!("Ignore Stack");
 
             let mut stack = IGNORE_STACK.lock().unwrap();
+            while let Some(val) = stack.pop() {
+                println!("Popped: {val}");
+            }
+        }
+        Stacks::FileStack => {
+            println!("File Stack");
+
+            let mut stack = FILE_STACK.lock().unwrap();
             while let Some(val) = stack.pop() {
                 println!("Popped: {val}");
             }
@@ -126,7 +141,7 @@ fn main() {
             println!("{}", arg);
         } else {
             let file: String = arg.clone();
-            add_to_stack(file, Stacks::CheckStack);
+            add_to_stack(file, Stacks::FileStack);
             continue;
         }
     }
@@ -135,17 +150,13 @@ fn main() {
         *ignore = std::path::PathBuf::from(&check_dir).join(".gitignore");
     }
 
-    // List out all files being checked
-    // {
-    //     let stack = CHECK_STACK.lock().unwrap();
-    //     for file in stack.iter() {
-    //         println!("finding->{}", file);
-    //     }
-    // }
-
     // get files/folders in current directory
     let path = &Path::new(&check_dir);
     git::check_directory(path, depth);
+
+    if let Err(err) = search::search() {
+        eprint!("{}", &err.to_string());
+    }
 
     free_stacks();
     return;
@@ -155,9 +166,10 @@ fn free_stacks() {
     release_stacks(Stacks::CheckStack);
     release_stacks(Stacks::ReadStack);
     release_stacks(Stacks::IgnoreStack);
+    release_stacks(Stacks::FileStack);
 }
 
-// fn set_error(msg: &str) {
+// fn set_major_error(msg: &str) {
 //     eprintln!("error -> {}", msg);
 //     free_stacks();
 // }
