@@ -1,69 +1,120 @@
-// use miamore::{
-// self, clear_origin, draw_border, draw_text, init_miamore, manage_cursor, position_t,
-// wait_for_seconds,
-// };
-
-use std::fs::File;
-use std::io::{BufReader, prelude::*};
+use std::path::*;
 use std::sync::{LazyLock, Mutex};
+
+mod git;
+mod tui;
 
 #[warn(unused)]
 static ERROR_BUF: Mutex<String> = Mutex::new(String::new());
 
+static CHECK_STACK: LazyLock<Mutex<Vec<String>>> = LazyLock::new(|| Mutex::new(Vec::new()));
 static IGNORE_STACK: LazyLock<Mutex<Vec<String>>> = LazyLock::new(|| Mutex::new(Vec::new()));
+// static FILE_STACK: LazyLock<Mutex<Vec<String>>> = LazyLock::new(|| Mutex::new(Vec::new()));
 
-// fn tui_view(_err: &str) {
-//     init_miamore(true, true);
-//     draw_border("Rust example", miamore::theme_t::thick_l);
+static SHOW_HIDDEN: LazyLock<Mutex<bool>> = LazyLock::new(|| Mutex::new(false));
 
-//     manage_cursor(miamore::cursor_t::move_, Some(position_t { x: 3, y: 4 }));
-//     draw_text("Hello from Ametrine!");
-
-//     wait_for_seconds(8.0);
-//     clear_origin();
-
-//     let err = "error here";
-//     set_error(err);
-// }
-
-fn add_ignore_stack(_ignore_file: String) {
-    let mut stack = IGNORE_STACK.lock().unwrap();
-    stack.push(_ignore_file);
+enum Stacks {
+    CheckStack,
+    // ReadStack,
+    IgnoreStack,
 }
 
-fn release_ignore_stack() {
-    let mut stack = IGNORE_STACK.lock().unwrap();
-    while let Some(val) = stack.pop() {
-        println!("Popped: {val}");
+fn add_to_stack(file: String, _stack: Stacks) {
+    match _stack {
+        Stacks::CheckStack => {
+            let mut stack = CHECK_STACK.lock().unwrap();
+            stack.push(file);
+        } // Stacks::ReadStack => {
+        // let mut stack = FILE_STACK.lock().unwrap();
+        // stack.push(file);
+        // }
+        Stacks::IgnoreStack => {
+            let mut stack = IGNORE_STACK.lock().unwrap();
+            stack.push(file);
+        }
     }
 }
 
-fn read_gitignore() -> std::io::Result<()> {
-    let ignore_file = File::open(".gitignore")?;
-    let reader = BufReader::new(ignore_file);
-
-    for line in reader.lines() {
-        let line = line?;
-        add_ignore_stack(line);
+fn release_stacks(stacks: Stacks) {
+    match stacks {
+        Stacks::CheckStack => {
+            let mut stack = CHECK_STACK.lock().unwrap();
+            while let Some(val) = stack.pop() {
+                println!("Popped: {val}");
+            }
+        } // Stacks::ReadStack => {
+        // let mut stack = FILE_STACK.lock().unwrap();
+        // while let Some(val) = stack.pop() {
+        // println!("Popped: {val}");
+        // }
+        // }
+        Stacks::IgnoreStack => {
+            let mut stack = IGNORE_STACK.lock().unwrap();
+            while let Some(val) = stack.pop() {
+                println!("Popped: {val}");
+            }
+        }
     }
+}
 
-    Ok(())
+pub fn toggle_show_hidden() {
+    if let Ok(mut lock) = SHOW_HIDDEN.lock() {
+        *lock = !*lock;
+    }
+}
+
+pub fn is_show_hidden() -> bool {
+    SHOW_HIDDEN.lock().map(|lock| *lock).unwrap_or(false)
 }
 
 fn main() {
     #[warn(unused_variables)]
-    let _current_err = ERROR_BUF.lock().unwrap();
+    let current_err = ERROR_BUF.lock().unwrap();
 
-    if let Err(err) = read_gitignore() {
-        set_error(&err.to_string());
+    // Get arguments
+    let mut args = std::env::args().skip(1);
+    let mut check_dir = String::new();
+
+    // Parse arguments
+    while let Some(arg) = args.next() {
+        if "--tui" == arg {
+            tui::tui_view(&current_err);
+        } else if "--dir" == arg {
+            if let Some(dir) = args.next() {
+                check_dir = dir;
+            }
+        } else if "--show_hidden" == arg {
+            toggle_show_hidden();
+        } else {
+            let file: String = arg.clone();
+            add_to_stack(file, Stacks::CheckStack);
+            continue;
+        }
     }
 
-    // tui_view(&current_err);
-    release_ignore_stack();
+    // List out all files being checked
+    {
+        let stack = CHECK_STACK.lock().unwrap();
+        for file in stack.iter() {
+            println!("finding->{}", file);
+        }
+    }
+
+    // get files/folders in current directory
+    let path = &Path::new(&check_dir);
+    git::check_file(path);
+
+    free_stacks();
     return;
 }
 
-fn set_error(msg: &str) {
-    eprintln!("error -> {}", msg);
-    release_ignore_stack();
+fn free_stacks() {
+    release_stacks(Stacks::CheckStack);
+    // release_stacks(Stacks::ReadStack);
+    release_stacks(Stacks::IgnoreStack);
 }
+
+// fn set_error(msg: &str) {
+//     eprintln!("error -> {}", msg);
+//     free_stacks();
+// }
