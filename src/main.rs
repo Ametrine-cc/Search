@@ -13,6 +13,9 @@ static IGNORE_STACK: LazyLock<Mutex<Vec<String>>> = LazyLock::new(|| Mutex::new(
 
 static SHOW_HIDDEN: LazyLock<Mutex<bool>> = LazyLock::new(|| Mutex::new(false));
 
+static GITIGNORE: LazyLock<Mutex<PathBuf>> =
+    LazyLock::new(|| Mutex::new(std::path::PathBuf::from(".gitignore")));
+
 enum Stacks {
     CheckStack,
     // ReadStack,
@@ -73,7 +76,7 @@ fn main() {
 
     // Get arguments
     let mut args = std::env::args().skip(1);
-    let mut check_dir = String::new();
+    let mut check_dir = String::from(".");
 
     // Parse arguments
     while let Some(arg) = args.next() {
@@ -92,17 +95,21 @@ fn main() {
         }
     }
 
-    // List out all files being checked
-    {
-        let stack = CHECK_STACK.lock().unwrap();
-        for file in stack.iter() {
-            println!("finding->{}", file);
-        }
+    if let Ok(mut ignore) = GITIGNORE.lock() {
+        *ignore = std::path::PathBuf::from(&check_dir).join(".gitignore");
     }
 
+    // List out all files being checked
+    // {
+    //     let stack = CHECK_STACK.lock().unwrap();
+    //     for file in stack.iter() {
+    //         println!("finding->{}", file);
+    //     }
+    // }
+
     // get files/folders in current directory
-    // let path = &Path::new(&check_dir);
-    // git::check_file(path);
+    let path = &Path::new(&check_dir);
+    git::check_file(path);
 
     free_stacks();
     return;
