@@ -16,6 +16,7 @@ static FILE_STACK: LazyLock<Mutex<Vec<String>>> = LazyLock::new(|| Mutex::new(Ve
 static SHOW_HIDDEN: LazyLock<Mutex<bool>> = LazyLock::new(|| Mutex::new(false));
 static SEARCH_DEEP: LazyLock<Mutex<bool>> = LazyLock::new(|| Mutex::new(false));
 static EXPLICIT_FILE: LazyLock<Mutex<bool>> = LazyLock::new(|| Mutex::new(false));
+static TOGGLE_VERBOSE: LazyLock<Mutex<bool>> = LazyLock::new(|| Mutex::new(false));
 
 static GITIGNORE: LazyLock<Mutex<PathBuf>> =
     LazyLock::new(|| Mutex::new(std::path::PathBuf::from(".gitignore")));
@@ -31,6 +32,7 @@ enum Toggles {
     ShowHidden,
     SearchDeep,
     ExplicitFile,
+    ToggleVerbose,
 }
 
 fn add_to_stack(file: String, _stack: Stacks) {
@@ -55,39 +57,29 @@ fn add_to_stack(file: String, _stack: Stacks) {
 }
 
 fn release_stacks(stacks: Stacks) {
-    print!("\nReleasing stack->");
-
     match stacks {
         Stacks::CheckStack => {
-            println!("Check Stack");
-
             let mut stack = CHECK_STACK.lock().unwrap();
             while let Some(val) = stack.pop() {
-                println!("Popped: {val}");
+                verbose_println("File Stack", val);
             }
         }
         Stacks::ReadStack => {
-            println!("Read Stack");
-
             let mut stack = READ_STACK.lock().unwrap();
             while let Some(val) = stack.pop() {
-                println!("Popped: {val}");
+                verbose_println("File Stack", val);
             }
         }
         Stacks::IgnoreStack => {
-            println!("Ignore Stack");
-
             let mut stack = IGNORE_STACK.lock().unwrap();
             while let Some(val) = stack.pop() {
-                println!("Popped: {val}");
+                verbose_println("File Stack", val);
             }
         }
         Stacks::FileStack => {
-            println!("File Stack");
-
             let mut stack = FILE_STACK.lock().unwrap();
             while let Some(val) = stack.pop() {
-                println!("Popped: {val}");
+                verbose_println("File Stack", val);
             }
         }
     }
@@ -111,6 +103,11 @@ fn toggle_bools(toggle: Toggles) {
                 *lock = !*lock;
             }
         }
+        Toggles::ToggleVerbose => {
+            if let Ok(mut lock) = TOGGLE_VERBOSE.lock() {
+                *lock = !*lock;
+            }
+        }
     }
 }
 
@@ -124,6 +121,10 @@ pub fn is_search_deep() -> bool {
 
 pub fn is_search_explicit() -> bool {
     EXPLICIT_FILE.lock().map(|lock| *lock).unwrap_or(false)
+}
+
+pub fn is_toggle_verbose() -> bool {
+    TOGGLE_VERBOSE.lock().map(|lock| *lock).unwrap_or(false)
 }
 
 // main
@@ -147,7 +148,7 @@ fn main() {
             }
         } else if "--show_hidden" == arg {
             toggle_bools(Toggles::ShowHidden);
-        } else if "--full" == arg {
+        } else if "--full" == arg || "--deep" == arg {
             toggle_bools(Toggles::SearchDeep);
             // println!("{}", arg);
         } else if "--depth" == arg {
@@ -160,6 +161,8 @@ fn main() {
             println!("{}", arg);
         } else if "--explict" == arg {
             toggle_bools(Toggles::ExplicitFile);
+        } else if "--verbose" == arg || "-v" == arg {
+            toggle_bools(Toggles::ToggleVerbose);
         } else {
             let file: String = arg.clone();
             add_to_stack(file, Stacks::FileStack);
@@ -181,6 +184,14 @@ fn main() {
 
     free_stacks();
     return;
+}
+
+fn verbose_println(function: &str, message: String) {
+    if !is_toggle_verbose() {
+        return;
+    }
+
+    println!("[{}] {}", function, message);
 }
 
 fn free_stacks() {
