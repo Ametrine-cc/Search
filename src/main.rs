@@ -15,6 +15,7 @@ static FILE_STACK: LazyLock<Mutex<Vec<String>>> = LazyLock::new(|| Mutex::new(Ve
 
 static SHOW_HIDDEN: LazyLock<Mutex<bool>> = LazyLock::new(|| Mutex::new(false));
 static SEARCH_DEEP: LazyLock<Mutex<bool>> = LazyLock::new(|| Mutex::new(false));
+static EXPLICIT_FILE: LazyLock<Mutex<bool>> = LazyLock::new(|| Mutex::new(false));
 
 static GITIGNORE: LazyLock<Mutex<PathBuf>> =
     LazyLock::new(|| Mutex::new(std::path::PathBuf::from(".gitignore")));
@@ -24,6 +25,12 @@ enum Stacks {
     ReadStack,
     IgnoreStack,
     FileStack,
+}
+
+enum Toggles {
+    ShowHidden,
+    SearchDeep,
+    ExplicitFile,
 }
 
 fn add_to_stack(file: String, _stack: Stacks) {
@@ -87,9 +94,23 @@ fn release_stacks(stacks: Stacks) {
 }
 
 // toggles and bool checks
-pub fn toggle_show_hidden() {
-    if let Ok(mut lock) = SHOW_HIDDEN.lock() {
-        *lock = !*lock;
+fn toggle_bools(toggle: Toggles) {
+    match toggle {
+        Toggles::ShowHidden => {
+            if let Ok(mut lock) = SHOW_HIDDEN.lock() {
+                *lock = !*lock;
+            }
+        }
+        Toggles::SearchDeep => {
+            if let Ok(mut lock) = SEARCH_DEEP.lock() {
+                *lock = !*lock;
+            }
+        }
+        Toggles::ExplicitFile => {
+            if let Ok(mut lock) = EXPLICIT_FILE.lock() {
+                *lock = !*lock;
+            }
+        }
     }
 }
 
@@ -97,14 +118,12 @@ pub fn is_show_hidden() -> bool {
     SHOW_HIDDEN.lock().map(|lock| *lock).unwrap_or(false)
 }
 
-pub fn toggle_search_deep() {
-    if let Ok(mut lock) = SEARCH_DEEP.lock() {
-        *lock = !*lock;
-    }
-}
-
 pub fn is_search_deep() -> bool {
     SEARCH_DEEP.lock().map(|lock| *lock).unwrap_or(false)
+}
+
+pub fn is_search_explicit() -> bool {
+    EXPLICIT_FILE.lock().map(|lock| *lock).unwrap_or(false)
 }
 
 // main
@@ -127,18 +146,20 @@ fn main() {
                 check_dir = dir;
             }
         } else if "--show_hidden" == arg {
-            toggle_show_hidden();
+            toggle_bools(Toggles::ShowHidden);
         } else if "--full" == arg {
-            toggle_search_deep();
+            toggle_bools(Toggles::SearchDeep);
             // println!("{}", arg);
         } else if "--depth" == arg {
-            toggle_search_deep();
+            toggle_bools(Toggles::SearchDeep);
             if let Some(deep) = args.next() {
                 if let Ok(parsed) = deep.parse::<i32>() {
                     depth = parsed;
                 }
             }
             println!("{}", arg);
+        } else if "--explict" == arg {
+            toggle_bools(Toggles::ExplicitFile);
         } else {
             let file: String = arg.clone();
             add_to_stack(file, Stacks::FileStack);

@@ -1,6 +1,6 @@
 use std::io::Result;
 
-use crate::{CHECK_STACK, FILE_STACK};
+use crate::{CHECK_STACK, FILE_STACK, is_search_explicit};
 
 pub fn search() -> Result<()> {
     println!("searching...");
@@ -28,8 +28,10 @@ pub fn search() -> Result<()> {
         for check_file in check_stack.iter() {
             if file == check_file {
                 println!("found {}", file);
-            } else if check_file.contains(file) {
-                println!("found {}", check_file);
+            } else if is_search_explicit() {
+                if check_file.contains(file) {
+                    println!("found {}", check_file);
+                }
             } else {
                 continue;
             }
